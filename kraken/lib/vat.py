@@ -41,10 +41,13 @@ class VATLoss(nn.Module):
         self.eps = eps
         self.ip = ip
 
-    def forward(self, model, x):
+    def forward(self, model, x: torch.Tensor, seq_len: torch.Tensor):
+        # ensure softmax
+        model.eval()
         with torch.no_grad():
-            pred = model(x)
-
+            pred, _ = model(x, seq_len)
+        # reenable log_softmax
+        model[-1].training = True
         # prepare random unit tensor
         d = torch.rand(x.shape, device=x.device).sub(0.5)
         d = _l2_normalize(d)
@@ -53,7 +56,7 @@ class VATLoss(nn.Module):
             # calc adversarial direction
             for _ in range(self.ip):
                 d.requires_grad_()
-                logp_hat = model(x + self.xi * d)
+                logp_hat, _ = model(x + self.xi * d, seq_len)
                 adv_distance = F.kl_div(logp_hat, pred, reduction='batchmean')
                 adv_distance.backward()
                 d = _l2_normalize(d.grad)
@@ -63,7 +66,7 @@ class VATLoss(nn.Module):
             d = torch.sign(d)
             r_adv = d * self.eps
 
-            logp_hat = model(x + r_adv)
+            logp_hat = model(x + r_adv, seq_len)
             lds = F.kl_div(logp_hat, pred, reduction='batchmean')
-
+        model.train()
         return lds

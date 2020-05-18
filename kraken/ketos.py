@@ -300,6 +300,9 @@ def segtrain(ctx, output, spec, line_width, load, freq, quit, epochs,
 @click.option('-e', '--evaluation-files', show_default=True, default=None, multiple=True,
               callback=_validate_manifests, type=click.File(mode='r', lazy=True),
               help='File(s) with paths to evaluation data. Overrides the `-p` parameter')
+@click.option('--vat-adaptation-files', show_default=True, default=None, multiple=True,
+              callback=_validate_manifests, type=click.File(mode='r', lazy=True),
+              help='File(s) with paths to unlabeled data for VAT model adaptation')
 @click.option('--preload/--no-preload', show_default=True, default=None, help='Hard enable/disable for training data preloading')
 @click.option('--threads', show_default=True, default=1, help='Number of OpenMP threads and workers when running on CPU.')
 @click.option('--load-hyper-parameters/--no-load-hyper-parameters', show_default=True, default=False,
@@ -328,9 +331,10 @@ def segtrain(ctx, output, spec, line_width, load, freq, quit, epochs,
 def train(ctx, batch_size, pad, output, spec, append, load, freq, quit, epochs,
           lag, min_delta, device, optimizer, lrate, momentum, weight_decay,
           schedule, partition, normalization, normalize_whitespace, codec,
-          resize, reorder, training_files, evaluation_files, preload, threads,
-          load_hyper_parameters, repolygonize, force_binarization, format_type,
-          augment, ground_truth):
+          resize, reorder, training_files, evaluation_files,
+          vat_adaptation_files, preload, threads, load_hyper_parameters,
+          repolygonize, force_binarization, format_type, augment,
+          ground_truth):
     """
     Trains a model from image-text pairs.
     """
@@ -382,6 +386,9 @@ def train(ctx, batch_size, pad, output, spec, append, load, freq, quit, epochs,
         evaluation_files = ground_truth[int(len(ground_truth) * partition):]
         logger.debug(f'Taking {len(evaluation_files)} lines/files from training set for evaluation')
 
+    if vat_adaptation_files:
+        message(f'Enabling VAT adaptation using {len(vat_adaptation_files)} lines/files')
+
     def _init_progressbar(label, length):
         if 'bar' in ctx.meta:
             ctx.meta['bar'].__exit__(None, None, None)
@@ -400,6 +407,7 @@ def train(ctx, batch_size, pad, output, spec, append, load, freq, quit, epochs,
                                                   reorder=reorder,
                                                   training_data=training_files,
                                                   evaluation_data=evaluation_files,
+                                                  vat_data=vat_adaptation_files,
                                                   preload=preload,
                                                   threads=threads,
                                                   load_hyper_parameters=load_hyper_parameters,

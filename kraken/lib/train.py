@@ -31,7 +31,7 @@ from typing import cast, Tuple, Callable, List, Dict, Any, Optional, Sequence
 from kraken.lib import models, vgsl, segmentation, default_specs
 from kraken.lib.util import make_printable
 from kraken.lib.codec import PytorchCodec
-from kraken.lib.dataset import BaselineSet, GroundTruthDataset, PolygonGTDataset, generate_input_transforms, preparse_xml_data, InfiniteDataLoader, compute_error
+from kraken.lib.dataset import BaselineSet, GroundTruthDataset, PolygonGTDataset, generate_input_transforms, preparse_xml_data, InfiniteDataLoader, compute_error, collate_sequences
 from kraken.lib.exceptions import KrakenInputException, KrakenEncodeException
 
 from torch.utils.data import DataLoader
@@ -234,6 +234,35 @@ class NoStopping(TrainStopper):
         return True
 
 
+def vat_recognition_loss_fn(model, vat_loader, criterion, output, target):
+    vat_batch = next(vat_loader)
+    # compute VAT loss
+    vat_loss = VATLoss(10.0, 2.5, 1.0)
+    aux_loss = vat_loss(model, vat_batch['image'], vat_batch['seq_lens'])
+
+    # compute CTC loss
+    if isinstance(output, tuple):
+        seq_lens = output[1]
+        output = output[0]
+        target_lens = target[1]
+        target = target[0]
+    else:
+        seq_lens = (output.size(2),)
+        target_lens = (target.size(1),)
+    # height should be 1 by now
+    if output.size(2) != 1:
+        raise KrakenInputException('Expected dimension 3 to be 1, actual {}'.format(output.size(2)))
+    output = output.squeeze(2)
+    # NCW -> WNC
+    loss = criterion(output.permute(2, 0, 1),  # type: ignore
+                     target,
+                     seq_lens,
+                     target_lens)
+    loss = loss + 0.1 * aux_loss
+    return loss
+
+
+
 def recognition_loss_fn(criterion, output, target):
     if isinstance(output, tuple):
         seq_lens = output[1]
@@ -410,6 +439,7 @@ class KrakenTrainer(object):
                               reorder: bool = True,
                               training_data: Sequence[Dict] = None,
                               evaluation_data: Sequence[Dict] = None,
+                              vat_data: Sequence[Dict] = None,
                               preload: Optional[bool] = None,
                               threads: int = 1,
                               load_hyper_parameters: bool = False,
@@ -468,6 +498,8 @@ class KrakenTrainer(object):
                 message('Repolygonizing data')
             training_data = preparse_xml_data(training_data, format_type, repolygonize)
             evaluation_data = preparse_xml_data(evaluation_data, format_type, repolygonize)
+            if vat_data is not None:
+                vat_data = preparse_xml_data(vat_data, format_type, repolygonize)
             DatasetClass = PolygonGTDataset
             valid_norm = False
         elif format_type == 'path':
@@ -477,8 +509,9 @@ class KrakenTrainer(object):
             if repolygonize:
                 logger.warning('Repolygonization enabled in `path` mode. Will be ignored.')
             training_data = [{'image': im} for im in training_data]
-            if evaluation_data:
-                evaluation_data = [{'image': im} for im in evaluation_data]
+            evaluation_data = [{'image': im} for im in evaluation_data]
+            if vat_data is not None:
+                vat_data = [{'image': im} for im in vat_data]
             valid_norm = True
         # format_type is None. Determine training type from length of training data entry
         else:
@@ -491,7 +524,6 @@ class KrakenTrainer(object):
                     force_binarization = False
                 if repolygonize:
                     logger.warning('Repolygonization enabled with box lines. Will be ignored.')
-
 
         # preparse input sizes from vgsl string to seed ground truth data set
         # sizes and dimension ordering.
@@ -556,6 +588,23 @@ class KrakenTrainer(object):
             except KrakenInputException as e:
                 logger.warning(str(e))
 
+        if vat_data:
+            vat_set = DatasetClass(normalization=hyper_params['normalization'],
+                                   whitespace_normalization=hyper_params['normalize_whitespace'],
+                                   reorder=reorder,
+                                   im_transforms=transforms,
+                                   preload=preload)
+            bar = progress_callback('Building vat adaptation set', len(vat_data))
+            for im in vat_data:
+                logger.debug(f'Adding line {im} to vat set')
+                try:
+                    vat_set.add(**im)
+                    bar()
+                except FileNotFoundError as e:
+                    logger.warning(f'{e.strerror}: {e.filename}. Skipping.')
+                except KrakenInputException as e:
+                    logger.warning(str(e))
+
         if len(gt_set._images) == 0:
             logger.error('No valid training data was provided to the train command. Please add valid XML or line data.')
             return None
@@ -575,7 +624,6 @@ class KrakenTrainer(object):
             logger.info(f'{char}\t{v}')
 
         logger.debug('Encoding training set')
-
 
         # use model codec when given
         if append:
@@ -666,6 +714,14 @@ class KrakenTrainer(object):
                                 pin_memory=True,
                                 collate_fn=collate_sequences)
 
+        if vat_data is not None:
+            vat_set.no_encode()
+            vat_loader = iter(InfiniteDataLoader(vat_set,
+                                                 batch_size=hyper_params['batch_size'],
+                                                 num_workers=loader_threads,
+                                                 pin_memory=True,
+                                                 collate_fn=collate_sequences))
+
         logger.debug('Constructing {} optimizer (lr: {}, momentum: {})'.format(hyper_params['optimizer'], hyper_params['lrate'], hyper_params['momentum']))
 
         # set model type metadata field
@@ -714,7 +770,8 @@ class KrakenTrainer(object):
                       event_frequency=hyper_params['freq'],
                       train_set=train_loader,
                       val_set=val_loader,
-                      stopper=st_it)
+                      stopper=st_it,
+                      loss_fn=recognition_loss_fn)
 
         trainer.add_lr_scheduler(tr_it)
 
