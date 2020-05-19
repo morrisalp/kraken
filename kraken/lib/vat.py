@@ -49,7 +49,7 @@ class VATLoss(nn.Module):
         # reenable log_softmax
         model[-1].training = True
         # prepare random unit tensor
-        d = torch.rand(x.shape, device=x.device).sub(0.5)
+        d = torch.rand(x.shape, device=x.device)
         d = _l2_normalize(d)
 
         with _disable_tracking_bn_stats(model):
@@ -66,7 +66,7 @@ class VATLoss(nn.Module):
             d = torch.sign(d)
             r_adv = d * self.eps
 
-            logp_hat = model(x + r_adv, seq_len)
+            logp_hat, _ = model(x + r_adv, seq_len)
             lds = F.kl_div(logp_hat, pred, reduction='batchmean')
         model.train()
         return lds

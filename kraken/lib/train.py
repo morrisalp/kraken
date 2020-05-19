@@ -26,9 +26,10 @@ import numpy as np
 import torch.nn.functional as F
 
 from itertools import cycle
+from functools import partial
 from typing import cast, Tuple, Callable, List, Dict, Any, Optional, Sequence
 
-from kraken.lib import models, vgsl, segmentation, default_specs
+from kraken.lib import models, vgsl, segmentation, default_specs, vat
 from kraken.lib.util import make_printable
 from kraken.lib.codec import PytorchCodec
 from kraken.lib.dataset import BaselineSet, GroundTruthDataset, PolygonGTDataset, generate_input_transforms, preparse_xml_data, InfiniteDataLoader, compute_error, collate_sequences
@@ -237,8 +238,8 @@ class NoStopping(TrainStopper):
 def vat_recognition_loss_fn(model, vat_loader, criterion, output, target):
     vat_batch = next(vat_loader)
     # compute VAT loss
-    vat_loss = VATLoss(10.0, 2.5, 1.0)
-    aux_loss = vat_loss(model, vat_batch['image'], vat_batch['seq_lens'])
+    vat_loss = vat.VATLoss(10.0, 2.5, 1)
+    aux_loss = vat_loss(model.nn, vat_batch['image'], vat_batch['seq_lens'])
 
     # compute CTC loss
     if isinstance(output, tuple):
@@ -402,7 +403,7 @@ class KrakenTrainer(object):
                 else:
                     o = self.model.nn(input)
                 self.optimizer.zero_grad()
-                loss = self.loss_fn(self.model.criterion, o, target)
+                loss = self.loss_fn(criterion=self.model.criterion, output=o, target=target)
                 if not torch.isinf(loss):
                     loss.backward()
                     self.optimizer.step()
@@ -763,6 +764,12 @@ class KrakenTrainer(object):
             logger.error(f'Invalid training interruption scheme {quit}')
             return None
 
+        # set loss function for normal training or VAT adaptation
+        if vat_data is not None:
+            loss_fn = partial(vat_recognition_loss_fn, model=nn, vat_loader=vat_loader)
+        else:
+            loss_fn = recognition_loss_fn
+
         trainer = cls(model=nn,
                       optimizer=optim,
                       device=device,
@@ -771,7 +778,7 @@ class KrakenTrainer(object):
                       train_set=train_loader,
                       val_set=val_loader,
                       stopper=st_it,
-                      loss_fn=recognition_loss_fn)
+                      loss_fn=loss_fn)
 
         trainer.add_lr_scheduler(tr_it)
 
