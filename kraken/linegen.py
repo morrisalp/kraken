@@ -142,7 +142,7 @@ pango.pango_font_description_new.restype = ctypes.POINTER(PangoFontDescription)
 pango.pango_font_description_set_family.argtypes = [ctypes.POINTER(PangoFontDescription), ensureBytes]  # type: ignore
 pango.pango_font_description_set_size.argtypes = [ctypes.POINTER(PangoFontDescription), ctypes.c_int]
 pango.pango_font_description_set_weight.argtypes = [ctypes.POINTER(PangoFontDescription), ctypes.c_uint]
-pango.pango_font_description_set_style.argtypes = [ctypes.POINTER(PangoFontDescription), ensureBytes]
+pango.pango_font_description_set_style.argtypes = [ctypes.POINTER(PangoFontDescription), ctypes.c_uint]
 
 
 pango.pango_layout_new.restype = ctypes.POINTER(PangoLayout)
@@ -166,6 +166,7 @@ class LineGenerator(object):
         pango.pango_font_description_set_size(self.font, font_size * 1024)
         pango.pango_font_description_set_family(self.font, family)
         pango.pango_font_description_set_weight(self.font, font_weight)
+        print('Setting style to: ', font_style)
         pango.pango_font_description_set_style(self.font, font_style) #one of 'normal', 'oblique', or 'italic'
 
     def render_line(self, text):

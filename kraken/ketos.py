@@ -787,6 +787,7 @@ def transcription(ctx, text_direction, scale, bw, maxcolseps,
     ti.write(output)
     message('\u2713', fg='green')
 
+style_options = ['normal', 'oblique', 'italic']
 
 @cli.command('linegen')
 @click.pass_context
@@ -807,7 +808,7 @@ def transcription(ctx, text_direction, scale, bw, maxcolseps,
               help='Font size to render texts in.')
 @click.option('-fw', '--font-weight', type=click.INT, default=400,
               help='Font weight to render texts in.')
-@click.option('-fst', '--font-style', type=click.Choice(['normal', 'oblique', 'italic']), default='normal',
+@click.option('-fst', '--font-style', type=click.Choice(style_options), default=style_options[0],
               help='Font style to render texts in')
 @click.option('-l', '--language',
               help='RFC-3066 language tag for language-dependent font shaping')
@@ -888,6 +889,8 @@ def line_generator(ctx, font, maxlines, encoding, normalization, renormalize,
     message('Symbols: {}'.format(''.join(chars)))
     if combining:
         message('Combining Characters: {}'.format(', '.join(combining)))
+
+    font_style = style_options.index(font_style)
     lg = linegen.LineGenerator(font, font_size, font_weight, language, font_style=font_style)
     with log.progressbar(lines, label='Writing images') as bar:
         for idx, line in enumerate(bar):
