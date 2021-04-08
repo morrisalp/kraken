@@ -807,6 +807,8 @@ def transcription(ctx, text_direction, scale, bw, maxcolseps,
               help='Font size to render texts in.')
 @click.option('-fw', '--font-weight', type=click.INT, default=400,
               help='Font weight to render texts in.')
+@click.option('-fst', '--font-style', type=click.Choice['normal', 'oblique', 'italic'], default='normal',
+              help='Font style to render texts in')
 @click.option('-l', '--language',
               help='RFC-3066 language tag for language-dependent font shaping')
 @click.option('-ll', '--max-length', type=click.INT, default=None,
@@ -830,7 +832,7 @@ def transcription(ctx, text_direction, scale, bw, maxcolseps,
               help='Output directory')
 @click.argument('text', nargs=-1, type=click.Path(exists=True))
 def line_generator(ctx, font, maxlines, encoding, normalization, renormalize,
-                   reorder, font_size, font_weight, language, max_length, strip,
+                   reorder, font_size, font_weight, font_style, language, max_length, strip,
                    disable_degradation, alpha, beta, distort, distortion_sigma,
                    legacy, output, text):
     """
@@ -886,7 +888,7 @@ def line_generator(ctx, font, maxlines, encoding, normalization, renormalize,
     message('Symbols: {}'.format(''.join(chars)))
     if combining:
         message('Combining Characters: {}'.format(', '.join(combining)))
-    lg = linegen.LineGenerator(font, font_size, font_weight, language)
+    lg = linegen.LineGenerator(font, font_size, font_weight, language, font_style=font_style)
     with log.progressbar(lines, label='Writing images') as bar:
         for idx, line in enumerate(bar):
             logger.info(line)
