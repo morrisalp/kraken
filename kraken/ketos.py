@@ -807,7 +807,7 @@ def transcription(ctx, text_direction, scale, bw, maxcolseps,
               help='Font size to render texts in.')
 @click.option('-fw', '--font-weight', type=click.INT, default=400,
               help='Font weight to render texts in.')
-@click.option('-fst', '--font-style', type=click.Choice['normal', 'oblique', 'italic'], default='normal',
+@click.option('-fst', '--font-style', type=click.Choice(['normal', 'oblique', 'italic']), default='normal',
               help='Font style to render texts in')
 @click.option('-l', '--language',
               help='RFC-3066 language tag for language-dependent font shaping')
