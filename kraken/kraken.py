@@ -489,7 +489,8 @@ def _validate_mm(ctx, param, value):
               help='Sets principal text direction in serialization output')
 @click.option('--threads', default=1, show_default=True, type=click.IntRange(1),
               help='Number of threads to use for OpenMP parallelization.')
-def ocr(ctx, model, pad, reorder, no_segmentation, text_direction, threads):
+@click.option('-L', '--language-model/--no-language-model', show_default=True, default=False, help='Use language model in decoding.')
+def ocr(ctx, model, pad, reorder, no_segmentation, text_direction, threads, language_model):
     """
     Recognizes text in line images.
     """
@@ -515,7 +516,7 @@ def ocr(ctx, model, pad, reorder, no_segmentation, text_direction, threads):
             raise click.BadParameter(f'No model for {k} found')
         message(f'Loading ANN {k}\t', nl=False)
         try:
-            rnn = models.load_any(location, device=ctx.meta['device'])
+            rnn = models.load_any(location, device=ctx.meta['device'], language_model=language_model)
             nm[k] = rnn
         except Exception:
             message('\u2717', fg='red')

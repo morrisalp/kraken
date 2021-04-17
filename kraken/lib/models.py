@@ -140,7 +140,7 @@ class TorchSeqRecognizer(object):
         return oseqs
 
 
-def load_any(fname: str, train: bool = False, device: str = 'cpu') -> TorchSeqRecognizer:
+def load_any(fname: str, train: bool = False, device: str = 'cpu', language_model: bool = False) -> TorchSeqRecognizer:
     """
     Loads anything that was, is, and will be a valid ocropus model and
     instantiates a shiny new kraken.lib.lstm.SeqRecognizer from the RNN
@@ -188,7 +188,10 @@ def load_any(fname: str, train: bool = False, device: str = 'cpu') -> TorchSeqRe
             pass
     if not nn:
         raise KrakenInvalidModelException('File {} not loadable by any parser.'.format(fname))
-    seq = TorchSeqRecognizer(nn, train=train, device=device)
+    if language_model:
+        seq = TorchSeqRecognizer(nn, train=train, device=device, decoder=kraken.lib.ctc_decoder.custom_decoder)
+    else:
+        seq = TorchSeqRecognizer(nn, train=train, device=device)
     seq.kind = kind
     return seq
 

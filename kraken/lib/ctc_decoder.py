@@ -119,6 +119,8 @@ def greedy_decoder(outputs: np.ndarray) -> List[Tuple[int, int, int, float]]:
             classes.append((label, lgroup[0][0], lgroup[-1][0], max(x[2] for x in lgroup)))
     return classes
 
+def custom_decoder(outputs: np.ndarray) -> List[Tuple[int, int, int, float]]:
+    return greedy_decoder(outputs)
 
 def blank_threshold_decoder(outputs: np.ndarray, threshold: float = 0.5) -> List[Tuple[int, int, int, float]]:
     """
