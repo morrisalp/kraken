@@ -12,29 +12,46 @@ class KrakenInterpolatedLM:
 
     UNK_CHAR = '^'
     PAD_CHAR = '`'
+    KNOWN_CHARS = set('₈₅+ á Tú⸢d₁o6à!>8Qm-1s*èš3:9<ṢKn.Bp(À54)rUìÉGktŠÌùṭI"lEMéx?RzN7e₄ṣiubḫʾg]ZÚ/Ía$SÁ[vDP2—È⸣qAL₆ḪíÙ0')
+    N_CHARS = len(KNOWN_CHARS) + 2 # extra 2 for UNK & PAD
 
-    def __init__(self):
+    def __init__(self, codec):
 
+        self.codec = codec
         
         with open(os.path.join(curdir, 'coeff_search.json'), 'r') as f:
             coeff_search = json.load(f)
-        Ls = coeff_search['best_Ls']
+        self.Ls = coeff_search['best_Ls'] # linear interpolation weights
 
         with open(os.path.join(curdir, 'ngram_totals.pk'), 'rb') as f:
-            ngram_totals = pickle.load(f)
+            self.ngram_totals = pickle.load(f)
 
         with open(os.path.join(curdir, 'ngram_counts.pk'), 'rb') as f:
-            ngram_counts = pickle.load(f)
+            self.ngram_counts = pickle.load(f)
 
-        ns_calculated = set(ngram_totals.keys())
+        self.ns_calculated = set(self.ngram_totals.keys())
 
-        assert all(n in ns_calculated for n in range(1, len(Ls) + 1)), (
+        assert all(n in self.ns_calculated for n in range(1, len(self.Ls) + 1)), (
             'Some n values are uncalculated in NgramCalculator'
         )
-        assert np.allclose(sum(Ls), 1), f'Ls do not add up to 1; sum={sum(Ls)}'
-        self.Ls = Ls # linear interpolation weights
-        self.N = len(Ls)
+        assert np.allclose(sum(self.Ls), 1), f'Ls do not add up to 1; sum={sum(self.Ls)}'
+        self.N = len(self.Ls)
 
+    def idx2char(self, idx):
+        codec_char = self.codec.l2c.get(chr(idx))
+        return codec_char if codec_char in self.KNOWN_CHARS else self.UNK_CHAR
+
+    def indices2string(self, indices):
+        return ''.join([self.idx2char(idx) for idx in indices])
+
+    def indices2ngram(self, indices):
+        txt = self.PAD_CHAR + self.indices2string(indices)
+        return txt[-self.N:]
+
+    def prefix2ngram(self, prefix):
+        # prefix in format as used in ctc_decoder.py
+        prefix_indices = [idx for idx, _, _ in prefix]
+        return self.indices2ngram(prefix_indices)
 
     def calculate_p(self, ngram, epsilon=1):
         n = len(ngram)
@@ -48,8 +65,8 @@ class KrakenInterpolatedLM:
             assert n - 1 in self.ns_calculated, f"Missing calculation for n={n - 1}"
             denom = self.ngram_counts[n-1].get(ngram_pref, 0)
         
-        epsilon_normed = epsilon / N_CHARS ** n
-        return (num + epsilon_normed) / (denom + epsilon_normed * N_CHARS ** n) # additive smoothing
+        epsilon_normed = epsilon / self.N_CHARS ** n
+        return (num + epsilon_normed) / (denom + epsilon_normed * self.N_CHARS ** n) # additive smoothing
 
     def log_p(self, ngram_string):
         ngram = tuple(ngram_string)
@@ -61,7 +78,4 @@ class KrakenInterpolatedLM:
         weights = np.array(self.Ls[:n]) / sum(self.Ls[:n])
         weighted_probs = [p * L for p, L in zip(probs, weights)]
         avg_prob = sum(weighted_probs)
-        return np.log2(avg_prob)
-
-
-lm = KrakenInterpolatedLM()
+        return np.log(avg_prob)

@@ -188,10 +188,9 @@ def load_any(fname: str, train: bool = False, device: str = 'cpu', language_mode
             pass
     if not nn:
         raise KrakenInvalidModelException('File {} not loadable by any parser.'.format(fname))
+    seq = TorchSeqRecognizer(nn, train=train, device=device)
     if language_model:
-        seq = TorchSeqRecognizer(nn, train=train, device=device, decoder=kraken.lib.ctc_decoder.custom_decoder)
-    else:
-        seq = TorchSeqRecognizer(nn, train=train, device=device)
+        seq.decoder = lambda output: kraken.lib.ctc_decoder.custom_decoder(output, seq.codec)
     seq.kind = kind
     return seq
 

@@ -26,7 +26,7 @@ from scipy.special import logsumexp
 from scipy.ndimage import measurements
 
 from itertools import groupby
-from kraken.lib.lm import lm
+from kraken.lib.lm import KrakenInterpolatedLM
 
 __all__ = ['beam_decoder', 'greedy_decoder', 'blank_threshold_decoder']
 
@@ -120,8 +120,63 @@ def greedy_decoder(outputs: np.ndarray) -> List[Tuple[int, int, int, float]]:
             classes.append((label, lgroup[0][0], lgroup[-1][0], max(x[2] for x in lgroup)))
     return classes
 
-def custom_decoder(outputs: np.ndarray) -> List[Tuple[int, int, int, float]]:
-    return greedy_decoder(outputs)
+def custom_decoder(outputs, codec, beam_size=5, alpha=10):
+    # adapted beam search, using LM
+
+    lm = KrakenInterpolatedLM(codec)
+
+    c, w = outputs.shape
+    probs = np.log(outputs)
+    beam = [(tuple(), (0.0, float('-inf')))]  # type: List[Tuple[Tuple, Tuple[float, float]]]
+
+    # loop over each time step
+    for t in range(w):
+        next_beam = collections.defaultdict(lambda: 2*(float('-inf'),))  # type: dict
+        # p_b -> prob for prefix ending in blank
+        # p_nb -> prob for prefix not ending in blank
+        for prefix, (p_b, p_nb) in beam:
+
+            ngram = lm.prefix2ngram(prefix)
+
+            # only update ending-in-blank-prefix probability for blank
+            n_p_b, n_p_nb = next_beam[prefix]
+            n_p_b = logsumexp((n_p_b, p_b + probs[0, t], p_nb + probs[0, t]))
+            next_beam[prefix] = (n_p_b, n_p_nb)
+            # loop over non-blank classes
+            for s in range(1, c):
+                # only update the not-ending-in-blank-prefix probability for prefix+s
+                l_end = prefix[-1][0] if prefix else None
+                n_prefix = prefix + ((s, t, t),)
+                n_p_b, n_p_nb = next_beam[n_prefix]
+
+                dp = probs[s, t] + alpha * lm.log_p(ngram)
+
+                if s == l_end:
+                    # substitute the previous non-blank-ending-prefix
+                    # probability for repeated labels
+                    n_p_nb = logsumexp((n_p_nb, p_b + dp))
+                else:
+                    n_p_nb = logsumexp((n_p_nb, p_b + dp, p_nb + dp))
+
+                next_beam[n_prefix] = (n_p_b, n_p_nb)
+
+                # If s is repeated at the end we also update the unchanged
+                # prefix. This is the merging case.
+                if s == l_end:
+                    n_p_b, n_p_nb = next_beam[prefix]
+                    n_p_nb = logsumexp((n_p_nb, p_nb + dp))
+                    # rewrite both new and old prefix positions
+                    next_beam[prefix[:-1] + ((prefix[-1][0], prefix[-1][1], t),)] = (n_p_b, n_p_nb)
+                    next_beam[n_prefix[:-1] + ((n_prefix[-1][0], n_prefix[-1][1], t),)] = next_beam.pop(n_prefix)
+
+        # Sort and trim the beam before moving on to the
+        # next time-step.
+        beam = sorted(next_beam.items(),
+                      key=lambda x: logsumexp(x[1]),
+                      reverse=True)
+        beam = beam[:beam_size]
+    return [(c, start, end, max(outputs[c, start:end+1])) for (c, start, end) in beam[0][0]]
+    #return greedy_decoder(outputs)
 
 def blank_threshold_decoder(outputs: np.ndarray, threshold: float = 0.5) -> List[Tuple[int, int, int, float]]:
     """
