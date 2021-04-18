@@ -21,7 +21,8 @@ class KrakenInterpolatedLM:
         
         with open(os.path.join(curdir, 'coeff_search.json'), 'r') as f:
             coeff_search = json.load(f)
-        self.Ls = coeff_search['best_Ls'] # linear interpolation weights
+        self.Ls = coeff_search['best_Ls']#[:4] # linear interpolation weights
+        #self.Ls = [x / sum(self.Ls) for x in self.Ls]
 
         with open(os.path.join(curdir, 'ngram_totals.pk'), 'rb') as f:
             self.ngram_totals = pickle.load(f)
@@ -68,7 +69,7 @@ class KrakenInterpolatedLM:
         epsilon_normed = epsilon / self.N_CHARS ** n
         return (num + epsilon_normed) / (denom + epsilon_normed * self.N_CHARS ** n) # additive smoothing
 
-    def log_p(self, ngram_string):
+    def p(self, ngram_string):
         ngram = tuple(ngram_string)
         # allow shorter ngrams, only using some interpolation coefficients
         n = len(ngram)
@@ -78,4 +79,7 @@ class KrakenInterpolatedLM:
         weights = np.array(self.Ls[:n]) / sum(self.Ls[:n])
         weighted_probs = [p * L for p, L in zip(probs, weights)]
         avg_prob = sum(weighted_probs)
-        return np.log(avg_prob)
+        return avg_prob
+
+    def log_p(self, ngram_string):
+        return np.log(self.p(ngram_string))

@@ -120,7 +120,41 @@ def greedy_decoder(outputs: np.ndarray) -> List[Tuple[int, int, int, float]]:
             classes.append((label, lgroup[0][0], lgroup[-1][0], max(x[2] for x in lgroup)))
     return classes
 
-def custom_decoder(outputs, codec, beam_size=5, alpha=10):
+def custom_decoder(outputs, codec):
+    lm = KrakenInterpolatedLM(codec)
+    probs = np.log(outputs)
+    n_vocab = outputs.shape[0]
+    seq_len = outputs.shape[1]
+    classes = []
+    last_label = -1
+    for t in range(seq_len):
+        empty_prob = probs[0, t]
+        greedy_label = np.argmax(probs[:, t])
+        if greedy_label == 0:
+            last_label = -1
+        else:
+            best_score = float('-inf')
+            best_label = -1
+            best_char = None
+            for s in range(1, n_vocab):
+                indices = [idx for idx, _, _, _ in classes] + [s]
+                ngram = lm.indices2ngram(indices)
+                score = probs[s, t] + lm.log_p(ngram)
+                char = lm.idx2char(s)
+                if score > best_score:
+                    best_score = score
+                    best_label = s
+                    best_char = char
+            if best_label == last_label:
+                L, start, end, S = classes[-1]
+                classes[-1] = (L, start, t, max(S, best_score))
+            else:
+                class_tuple = (best_label, t, t, best_score)
+                classes.append(class_tuple)
+                last_label = best_label
+    return classes
+
+def custom_decoder2(outputs, codec, beam_size=5, alpha=1):
     # adapted beam search, using LM
 
     lm = KrakenInterpolatedLM(codec)
@@ -149,7 +183,7 @@ def custom_decoder(outputs, codec, beam_size=5, alpha=10):
                 n_prefix = prefix + ((s, t, t),)
                 n_p_b, n_p_nb = next_beam[n_prefix]
 
-                dp = probs[s, t] + alpha * lm.log_p(ngram)
+                dp = probs[s, t] + alpha * (lm.log_p(ngram) - lm.log_p(ngram[-1:]))
 
                 if s == l_end:
                     # substitute the previous non-blank-ending-prefix
