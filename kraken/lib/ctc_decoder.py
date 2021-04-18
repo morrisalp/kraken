@@ -157,7 +157,7 @@ class Beam:
         return Beam(self.lm, self.alpha, copy(self.classes), self.score, self.last_label)
 
 
-def custom_decoder(outputs, codec, alpha=2, beam_size=3):
+def custom_decoder(outputs, codec, alpha=0.5, beam_size=1):
     lm = KrakenInterpolatedLM(codec)
     probs = np.log(outputs)
     n_vocab = outputs.shape[0]
