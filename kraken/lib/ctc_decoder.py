@@ -120,7 +120,7 @@ def greedy_decoder(outputs: np.ndarray) -> List[Tuple[int, int, int, float]]:
             classes.append((label, lgroup[0][0], lgroup[-1][0], max(x[2] for x in lgroup)))
     return classes
 
-def custom_decoder(outputs, codec):
+def custom_decoder(outputs, codec, alpha=2):
     lm = KrakenInterpolatedLM(codec)
     probs = np.log(outputs)
     n_vocab = outputs.shape[0]
@@ -139,7 +139,7 @@ def custom_decoder(outputs, codec):
             for s in range(1, n_vocab):
                 indices = [idx for idx, _, _, _ in classes] + [s]
                 ngram = lm.indices2ngram(indices)
-                score = probs[s, t] + lm.log_p(ngram)
+                score = probs[s, t] + lm.log_p(ngram) * alpha
                 char = lm.idx2char(s)
                 if score > best_score:
                     best_score = score
