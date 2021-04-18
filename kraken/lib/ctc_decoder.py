@@ -26,6 +26,7 @@ from scipy.special import logsumexp
 from scipy.ndimage import measurements
 
 from itertools import groupby
+from kraken.lib.lm import lm
 
 __all__ = ['beam_decoder', 'greedy_decoder', 'blank_threshold_decoder']
 
