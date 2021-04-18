@@ -120,39 +120,60 @@ def greedy_decoder(outputs: np.ndarray) -> List[Tuple[int, int, int, float]]:
             classes.append((label, lgroup[0][0], lgroup[-1][0], max(x[2] for x in lgroup)))
     return classes
 
-def custom_decoder(outputs, codec, alpha=2):
+from copy import copy
+
+class Beam:
+
+    def __init__(self, lm, alpha, classes=None, score=0, last_label=-1):
+        self.score = score
+        self.classes = [] if classes is None else classes
+        self.last_label = last_label
+        self.lm = lm
+        self.alpha = alpha
+
+    def get_extended_score(self, label, prob):
+        indices = [idx for idx, _, _, _ in self.classes] + [label]
+        ngram = self.lm.indices2ngram(indices)
+        return self.score + prob + self.lm.log_p(ngram) * self.alpha
+
+    def extend(self, label, prob):
+        new_score = self.get_extended_score(label, prob)
+        score_delta = new_score - self.score
+
+        if label == 0:
+            self.last_label = -1
+        else:
+            t = 0 if len(self.classes) == 0 else self.classes[-1][2] + 1
+            if self.last_label == label:
+                L, start, end, S = self.classes[-1]
+                self.classes[-1] = (L, start, t, max(S, score_delta))
+            else:
+                class_tuple = (label, t, t, score_delta)
+                self.classes.append(class_tuple)
+            self.last_label = label
+        
+        self.score = new_score
+
+        return Beam(self.lm, self.alpha, copy(self.classes), self.score, self.last_label)
+
+
+def custom_decoder(outputs, codec, alpha=2, beam_size=3):
     lm = KrakenInterpolatedLM(codec)
     probs = np.log(outputs)
     n_vocab = outputs.shape[0]
     seq_len = outputs.shape[1]
-    classes = []
-    last_label = -1
+    beams = [Beam(lm, alpha) for _ in range(beam_size)]
     for t in range(seq_len):
         empty_prob = probs[0, t]
         greedy_label = np.argmax(probs[:, t])
         if greedy_label == 0:
-            last_label = -1
+            for beam in beams:
+                beam.extend(0, empty_prob)
         else:
-            best_score = float('-inf')
-            best_label = -1
-            best_char = None
-            for s in range(1, n_vocab):
-                indices = [idx for idx, _, _, _ in classes] + [s]
-                ngram = lm.indices2ngram(indices)
-                score = probs[s, t] + lm.log_p(ngram) * alpha
-                char = lm.idx2char(s)
-                if score > best_score:
-                    best_score = score
-                    best_label = s
-                    best_char = char
-            if best_label == last_label:
-                L, start, end, S = classes[-1]
-                classes[-1] = (L, start, t, max(S, best_score))
-            else:
-                class_tuple = (best_label, t, t, best_score)
-                classes.append(class_tuple)
-                last_label = best_label
-    return classes
+            candidates = [(b, s) for b in range(beam_size) for s in range(1, n_vocab)]
+            sorted_candidates = sorted(candidates, key=lambda x: beams[x[0]].get_extended_score(x[1], probs[x[1], t]))
+            beams = [beams[b].extend(s, probs[s, t]) for b, s in sorted_candidates[-beam_size:]]
+    return beams[-1].classes
 
 def custom_decoder2(outputs, codec, beam_size=5, alpha=1):
     # adapted beam search, using LM
