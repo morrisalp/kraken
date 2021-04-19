@@ -5,6 +5,8 @@ import pathlib
 import os
 import json
 import numpy as np
+import tensorflow as tf
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 curdir = pathlib.Path(__file__).parent.absolute()
 
@@ -83,3 +85,53 @@ class KrakenInterpolatedLM:
 
     def log_p(self, ngram_string):
         return np.log(self.p(ngram_string))
+
+
+class KrakenInterpolatedRNN:
+    UNK_CHAR = '^'
+    PAD_CHAR = '`'
+    KNOWN_CHARS = set(
+        '₈₅+ á Tú⸢d₁o6à!>8Qm-1s*èš3:9<ṢKn.Bp(À54)rUìÉGktŠÌùṭI"lEMéx?RzN7e₄ṣiubḫʾg]ZÚ/Ía$SÁ[vDP2—È⸣qAL₆ḪíÙ0')
+    N_CHARS = len(KNOWN_CHARS) + 2  # extra 2 for UNK & PAD
+    MAXLEN = 100
+
+    def __init__(self, codec):
+
+        self.codec = codec
+
+        with open('tokenizer.pk', 'rb') as f:
+            self.tokenizer = pickle.load(f)
+
+        self.model = tf.keras.models.load_model('saved_model')
+
+        self.N = len(self.Ls)
+
+    def idx2char(self, idx):
+        codec_char = self.codec.l2c.get(chr(idx))
+        return codec_char if codec_char in self.KNOWN_CHARS else self.UNK_CHAR
+
+    def indices2string(self, indices):
+        return ''.join([self.idx2char(idx) for idx in indices])
+
+    def indices2ngram(self, indices):
+        txt = self.PAD_CHAR + self.indices2string(indices)
+        return txt[-self.N:]
+
+    def prefix2ngram(self, prefix):
+        # prefix in format as used in ctc_decoder.py
+        prefix_indices = [idx for idx, _, _ in prefix]
+        return self.indices2ngram(prefix_indices)
+
+    def p(self, t):
+        return self.model.predict(t)
+
+    def log_p(self, text):
+
+        next_char = text[-1]
+        text = text[:-1]
+        seqs = self.tokenizer.texts_to_sequences([PAD_CHAR + text])
+        next_char = self.tokenizer.texts_to_sequences([next_char])
+
+        t = pad_sequences(seqs, maxlen=MAXLEN, padding='post', truncating='post')
+        probs = self.p(t)
+        return np.log(softmax(probs))[0, len(text), next_char]
