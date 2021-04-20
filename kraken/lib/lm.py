@@ -99,7 +99,7 @@ class KrakenInterpolatedRNN:
 
         self.codec = codec
 
-        with open('tokenizer.pk', 'rb') as f:
+        with open(os.path.join(curdir, 'tokenizer.pk'), 'rb') as f:
             self.tokenizer = pickle.load(f)
 
         self.model = tf.keras.models.load_model('saved_model')
