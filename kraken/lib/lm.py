@@ -102,7 +102,7 @@ class KrakenInterpolatedRNN:
         with open(os.path.join(curdir, 'tokenizer.pk'), 'rb') as f:
             self.tokenizer = pickle.load(f)
 
-        self.model = tf.keras.models.load_model('saved_model')
+        self.model = tf.keras.models.load_model(os.path.join(curdir, 'saved_model'))
 
         self.N = len(self.Ls)
 
