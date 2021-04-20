@@ -26,7 +26,7 @@ from scipy.special import logsumexp
 from scipy.ndimage import measurements
 
 from itertools import groupby
-from kraken.lib.lm import KrakenInterpolatedLM
+from kraken.lib.lm import KrakenInterpolatedRNN
 
 __all__ = ['beam_decoder', 'greedy_decoder', 'blank_threshold_decoder']
 
@@ -158,7 +158,7 @@ class Beam:
 
 
 def custom_decoder(outputs, codec, alpha=0.5, beam_size=1):
-    lm = KrakenInterpolatedLM(codec)
+    lm = KrakenInterpolatedRNN(codec)
     probs = np.log(outputs)
     n_vocab = outputs.shape[0]
     seq_len = outputs.shape[1]
@@ -178,7 +178,7 @@ def custom_decoder(outputs, codec, alpha=0.5, beam_size=1):
 def custom_decoder2(outputs, codec, beam_size=5, alpha=1):
     # adapted beam search, using LM
 
-    lm = KrakenInterpolatedLM(codec)
+    lm = KrakenInterpolatedRNN(codec)
 
     c, w = outputs.shape
     probs = np.log(outputs)
