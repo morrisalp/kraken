@@ -142,6 +142,8 @@ pango.pango_font_description_new.restype = ctypes.POINTER(PangoFontDescription)
 pango.pango_font_description_set_family.argtypes = [ctypes.POINTER(PangoFontDescription), ensureBytes]  # type: ignore
 pango.pango_font_description_set_size.argtypes = [ctypes.POINTER(PangoFontDescription), ctypes.c_int]
 pango.pango_font_description_set_weight.argtypes = [ctypes.POINTER(PangoFontDescription), ctypes.c_uint]
+pango.pango_font_description_set_style.argtypes = [ctypes.POINTER(PangoFontDescription), ctypes.c_uint]
+
 
 pango.pango_layout_new.restype = ctypes.POINTER(PangoLayout)
 pango.pango_layout_set_markup.argtypes = [ctypes.POINTER(PangoLayout), ensureBytes, ctypes.c_int]  # type: ignore
@@ -156,7 +158,7 @@ class LineGenerator(object):
     """
     Produces degraded line images using a single collection of font families.
     """
-    def __init__(self, family='Sans', font_size=32, font_weight=400, language=None):
+    def __init__(self, family='Sans', font_size=32, font_weight=400, language=None, font_style='normal'):
         self.language = language
         self.font = pango.pango_font_description_new()
         # XXX: get PANGO_SCALE programatically from somewhere
@@ -164,6 +166,8 @@ class LineGenerator(object):
         pango.pango_font_description_set_size(self.font, font_size * 1024)
         pango.pango_font_description_set_family(self.font, family)
         pango.pango_font_description_set_weight(self.font, font_weight)
+        print('Setting style to: ', font_style)
+        pango.pango_font_description_set_style(self.font, font_style) #one of 'normal', 'oblique', or 'italic'
 
     def render_line(self, text):
         """
